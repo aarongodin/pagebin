@@ -1,0 +1,12 @@
+# .envrc-example
+# see pkg/config/runtime.go for usage
+#
+# This file is meant for local development only.
+# Recommended workflow is to use a tool like direnv to add
+# the variables to your shell.
+
+# export HOST=127.0.0.1
+# export PORT=8080
+# export DEBUG=true
+# export LOG_FORMAT=console
+# export DATABASE_FILE=pagebin.data
