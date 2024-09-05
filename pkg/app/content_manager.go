@@ -12,6 +12,7 @@ import (
 // ContentManager wraps logic for retrieving content for rendering
 type ContentManager interface {
 	Get(ctx context.Context, uid ulid.ULID) ([]byte, error)
+	Refresh(uid ulid.ULID)
 }
 
 type cachedContentManager struct {
@@ -30,6 +31,10 @@ func (m cachedContentManager) Get(ctx context.Context, uid ulid.ULID) ([]byte, e
 	}
 	m.cache.Add(uid, raw)
 	return raw, nil
+}
+
+func (m cachedContentManager) Refresh(uid ulid.ULID) {
+	m.cache.Remove(uid)
 }
 
 // NewCachedContentManager creates a content manager backed by an LRU cache. Configure the cache size and options through runtime config.

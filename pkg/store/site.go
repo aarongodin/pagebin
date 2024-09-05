@@ -14,7 +14,7 @@ var (
 
 type SiteStore interface {
 	GetSite(ctx context.Context) (core.Site, error)
-	CreateSite(ctx context.Context, title string, version ulid.ULID) (core.Site, error)
+	CreateSite(ctx context.Context, title string, version ulid.ULID, nextVersion ulid.ULID) (core.Site, error)
 	UpdateSite(ctx context.Context, title string) (core.Site, error)
 }
 
@@ -26,11 +26,12 @@ func (s siteStore) GetSite(ctx context.Context) (core.Site, error) {
 	return s.db.One(ctx, bucketApp, keySite)
 }
 
-func (s siteStore) CreateSite(ctx context.Context, title string, version ulid.ULID) (core.Site, error) {
+func (s siteStore) CreateSite(ctx context.Context, title string, version ulid.ULID, nextVersion ulid.ULID) (core.Site, error) {
 	site := core.Site{
-		UID:     ulid.Make(),
-		Title:   title,
-		Version: version,
+		UID:         ulid.Make(),
+		Title:       title,
+		Version:     version,
+		NextVersion: nextVersion,
 	}
 	if err := s.db.Save(ctx, bucketApp, keySite, site); err != nil {
 		return core.Site{}, err

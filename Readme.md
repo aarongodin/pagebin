@@ -49,9 +49,3 @@ then open [http://localhost:8080](localhost:8080) to view the default site.
 
 ## Overview
 
-Pagebin manages pages through a slightly different approach to many CMS software. The entire site is versioned, so edits to the website do not take effect until the website is published. This allows the authors to make multiple edits, preview the site, and promote all the changes at once when it's ready.
-
-### Pages
-
-Everything in pagebin is a page. Pages have a URL path, a title, and content.
-

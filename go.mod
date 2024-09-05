@@ -5,6 +5,7 @@ go 1.22.5
 require (
 	github.com/aymerick/raymond v2.0.2+incompatible
 	github.com/caarlos0/env/v7 v7.1.0
+	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/joomcode/errorx v1.1.1

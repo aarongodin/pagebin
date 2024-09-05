@@ -8,16 +8,16 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-// VersionManager controls how a site version is used during rendering
 type VersionManager interface {
-	GetByPath(path string) (ulid.ULID, error)
-	Load(ctx context.Context, uid ulid.ULID) error
+	GetByPath(ctx context.Context, targetVersion *core.TargetVersion, path string) (ulid.ULID, error)
+	Load(ctx context.Context, currentUID ulid.ULID, nextUID ulid.ULID) error
+	SetPage(previousPath string, path string, pageUID ulid.ULID) error
 }
 
 type versionManager struct {
 	current  *compiledVersion
+	next     *compiledVersion
 	versions store.VersionStore
-	pages    store.PageStore
 }
 
 // This could probably be placed in the core
@@ -31,42 +31,73 @@ func (c compiledVersion) Find(value string) (ulid.ULID, bool) {
 	return uid, exists
 }
 
-func (m *versionManager) GetByPath(path string) (ulid.ULID, error) {
-	if m.current == nil || m.current.index == nil {
-		return ulid.ULID{}, core.ErrVersionNotCompiled.NewWithNoMessage()
+func (m *versionManager) GetByPath(ctx context.Context, targetVersion *core.TargetVersion, path string) (ulid.ULID, error) {
+	var targetCompiledVersion *compiledVersion
+	switch {
+	case targetVersion.IsCurrent():
+		targetCompiledVersion = m.current
+	case targetVersion.IsNext():
+		targetCompiledVersion = m.next
+	default:
+		version, err := m.versions.GetVersion(ctx, targetVersion.UID())
+		if err != nil {
+			return ulid.ULID{}, err
+		}
+		pageUID, exists := version.Pages[path]
+		if !exists {
+			return ulid.ULID{}, core.ErrPageNotFound.NewWithNoMessage()
+		}
+		return pageUID, nil
 	}
-	uid, exists := m.current.Find(path)
+
+	if targetCompiledVersion == nil || targetCompiledVersion.index == nil {
+		return ulid.ULID{}, core.ErrVersionNotCompiled.New("version not compiled")
+	}
+	uid, exists := targetCompiledVersion.Find(path)
 	if !exists {
 		return ulid.ULID{}, core.ErrPageNotFound.NewWithNoMessage()
 	}
 	return uid, nil
 }
 
-func (m *versionManager) Load(ctx context.Context, uid ulid.ULID) error {
-	c := &compiledVersion{
-		uid:   uid,
-		index: map[string]ulid.ULID{},
-	}
-	version, err := m.versions.GetVersion(ctx, uid)
+func (m *versionManager) Load(ctx context.Context, currentUID ulid.ULID, nextUID ulid.ULID) error {
+	current, err := m.load(ctx, currentUID)
 	if err != nil {
 		return err
 	}
-	// I'm stuck here, seems like I have to load every page, and maybe that's ok?
-	// but perhaps I can just optimize it later. It doesn't seem like loading 10,000 json blobs would be that much of an issue though. Just will see a spike in compute
-	for _, pageUID := range version.Pages {
-		page, err := m.pages.GetPage(ctx, pageUID)
-		if err != nil {
-			return err
-		}
-		c.index[page.Path] = pageUID
+	next, err := m.load(ctx, nextUID)
+	if err != nil {
+		return err
 	}
-	m.current = c
+	m.current = current
+	m.next = next
 	return nil
 }
 
-func NewVersionManager(versions store.VersionStore, pages store.PageStore) VersionManager {
+func (m *versionManager) load(ctx context.Context, uid ulid.ULID) (*compiledVersion, error) {
+	version, err := m.versions.GetVersion(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	return &compiledVersion{
+		uid:   uid,
+		index: version.Pages,
+	}, nil
+}
+
+func (m *versionManager) SetPage(previousPath string, path string, pageUID ulid.ULID) error {
+	if m.next == nil || m.next.index == nil {
+		return core.ErrVersionNotCompiled.New("next version not compiled")
+	}
+	if previousPath != "" {
+		delete(m.next.index, previousPath)
+	}
+	m.next.index[path] = pageUID
+	return nil
+}
+
+func NewVersionManager(versions store.VersionStore) VersionManager {
 	return &versionManager{
 		versions: versions,
-		pages:    pages,
 	}
 }

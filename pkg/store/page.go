@@ -9,7 +9,7 @@ import (
 )
 
 type PageStore interface {
-	CreatePage(ctx context.Context, title string, path string, content ulid.ULID, templateName string, tags []string, excerpt string) (core.Page, error)
+	PutPage(ctx context.Context, uid *ulid.ULID, write core.WritablePage, content ulid.ULID) (core.Page, error)
 	GetPage(ctx context.Context, uid ulid.ULID) (core.Page, error)
 }
 
@@ -17,15 +17,19 @@ type pageStore struct {
 	db documentDB[core.Page]
 }
 
-func (s pageStore) CreatePage(ctx context.Context, title string, path string, content ulid.ULID, templateName string, tags []string, excerpt string) (core.Page, error) {
+func (s pageStore) PutPage(ctx context.Context, uid *ulid.ULID, write core.WritablePage, content ulid.ULID) (core.Page, error) {
+	if uid == nil {
+		newUID := ulid.Make()
+		uid = &newUID
+	}
 	page := core.Page{
-		UID:          ulid.Make(),
-		Title:        title,
-		Path:         path,
+		UID:          *uid,
+		Title:        write.Title,
+		Path:         write.Path,
 		Content:      content,
-		TemplateName: templateName,
-		Tags:         tags,
-		Excerpt:      excerpt,
+		TemplateName: write.TemplateName,
+		Tags:         write.Tags,
+		Excerpt:      write.Excerpt,
 	}
 	if err := s.db.Save(ctx, bucketPages, page.UID.String(), page); err != nil {
 		return core.Page{}, err
