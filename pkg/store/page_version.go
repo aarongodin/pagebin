@@ -14,6 +14,7 @@ type PageVersionIndex interface {
 	GetVersions(ctx context.Context, pageUID ulid.ULID) (mapset.Set[ulid.ULID], error)
 	CreateVersion(ctx context.Context, version *core.Version) error
 	Add(ctx context.Context, pageUID ulid.ULID, versionUID ulid.ULID) error
+	Remove(ctx context.Context, pageUID ulid.ULID, versionUID ulid.ULID) error
 }
 
 type pageVersionIndex struct {
@@ -38,6 +39,18 @@ func (i pageVersionIndex) GetVersions(ctx context.Context, pageUID ulid.ULID) (m
 }
 
 func (i pageVersionIndex) Add(ctx context.Context, pageUID ulid.ULID, versionUID ulid.ULID) error {
+	return i.modify(ctx, pageUID, func(versions mapset.Set[ulid.ULID]) {
+		versions.Add(versionUID)
+	})
+}
+
+func (i pageVersionIndex) Remove(ctx context.Context, pageUID ulid.ULID, versionUID ulid.ULID) error {
+	return i.modify(ctx, pageUID, func(versions mapset.Set[ulid.ULID]) {
+		versions.Remove(versionUID)
+	})
+}
+
+func (i pageVersionIndex) modify(ctx context.Context, pageUID ulid.ULID, fn func(versions mapset.Set[ulid.ULID])) error {
 	return transactCtx(ctx, i.db, true, func(tx *bolt.Tx) error {
 		b, err := getIndexBucket(tx, bucketIndexPageVersions)
 		if err != nil {
@@ -50,7 +63,7 @@ func (i pageVersionIndex) Add(ctx context.Context, pageUID ulid.ULID, versionUID
 				return err
 			}
 		}
-		versions.Add(versionUID)
+		fn(versions)
 		raw, err := json.Marshal(&versions)
 		if err != nil {
 			return err

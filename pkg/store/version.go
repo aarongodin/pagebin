@@ -13,6 +13,7 @@ type VersionStore interface {
 	CreateVersion(ctx context.Context, pages map[string]ulid.ULID, theme ulid.ULID) (core.Version, error)
 	GetVersion(ctx context.Context, uid ulid.ULID) (core.Version, error)
 	SetPage(ctx context.Context, uid ulid.ULID, previousPath string, path string, pageUID ulid.ULID) (core.Version, error)
+	UnsetPage(ctx context.Context, uid ulid.ULID, path string, pageUID ulid.ULID) (core.Version, error)
 	Clone(ctx context.Context, uid ulid.ULID) (core.Version, error)
 	GetPageVersions(ctx context.Context, pageUID ulid.ULID) (mapset.Set[ulid.ULID], error)
 }
@@ -54,6 +55,21 @@ func (s versionStore) SetPage(ctx context.Context, uid ulid.ULID, previousPath s
 		return core.Version{}, err
 	}
 	if err := s.pageVersions.Add(ctx, pageUID, uid); err != nil {
+		return core.Version{}, nil
+	}
+	return version, nil
+}
+
+func (s versionStore) UnsetPage(ctx context.Context, uid ulid.ULID, path string, pageUID ulid.ULID) (core.Version, error) {
+	version, err := s.db.One(ctx, bucketVersions, uid.String())
+	if err != nil {
+		return core.Version{}, err
+	}
+	delete(version.Pages, path)
+	if err := s.db.Save(ctx, bucketVersions, uid.String(), version); err != nil {
+		return core.Version{}, err
+	}
+	if err := s.pageVersions.Remove(ctx, pageUID, uid); err != nil {
 		return core.Version{}, nil
 	}
 	return version, nil

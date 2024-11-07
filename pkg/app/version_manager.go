@@ -12,6 +12,7 @@ type VersionManager interface {
 	GetByPath(ctx context.Context, targetVersion *core.TargetVersion, path string) (ulid.ULID, error)
 	Load(ctx context.Context, currentUID ulid.ULID, nextUID ulid.ULID) error
 	SetPage(previousPath string, path string, pageUID ulid.ULID) error
+	UnsetPage(path string) error
 }
 
 type versionManager struct {
@@ -93,6 +94,14 @@ func (m *versionManager) SetPage(previousPath string, path string, pageUID ulid.
 		delete(m.next.index, previousPath)
 	}
 	m.next.index[path] = pageUID
+	return nil
+}
+
+func (m *versionManager) UnsetPage(path string) error {
+	if m.next == nil || m.next.index == nil {
+		return core.ErrVersionNotCompiled.New("next version not compiled")
+	}
+	delete(m.next.index, path)
 	return nil
 }
 

@@ -14,8 +14,10 @@ type Service interface {
 	GetSite(ctx context.Context) (core.Site, error)
 	UpdateSite(ctx context.Context, title string) (core.Site, error)
 	GetVersion(ctx context.Context, uid ulid.ULID) (core.Version, error)
+	GetPages(ctx context.Context, start *ulid.ULID) ([]core.Page, *ulid.ULID, error)
 	GetPage(ctx context.Context, uid ulid.ULID) (core.Page, error)
 	PutPage(ctx context.Context, uid *ulid.ULID, page core.WritablePage, content []byte) (created core.Page, txErr error)
+	DeletePage(ctx context.Context, uid ulid.ULID) error
 	VersionManager() VersionManager
 	ThemeManager() ThemeManager
 	ContentManager() ContentManager
@@ -51,6 +53,10 @@ func (s *Svc) UpdateSite(ctx context.Context, title string) (core.Site, error) {
 func (s *Svc) GetPage(ctx context.Context, uid ulid.ULID) (core.Page, error) {
 	return s.store.Pages().GetPage(ctx, uid)
 }
+
+// func (s *Svc) GetPages(ctx context.Context, cursor *ulid.ULID) ([]core.Page, *ulid.ULID, error) {
+// 	return s.store
+// }
 
 func (s *Svc) GetVersion(ctx context.Context, uid ulid.ULID) (core.Version, error) {
 	return s.store.Versions().GetVersion(ctx, uid)
@@ -170,92 +176,30 @@ func (s *Svc) updatePage(ctx context.Context, current core.Page, write core.Writ
 	return page, nil
 }
 
-// func (s *Svc) CreatePage(ctx context.Context, title string, path string, templateName string, tags []string, excerpt string, content []byte) (page core.Page, txErr error) {
-// 	// TODO: verify template exists
-
-// 	ctx, err := s.store.StartTx(ctx, true)
-// 	if err != nil {
-// 		return page, err
-// 	}
-// 	defer func() {
-// 		txErr = s.store.EndTx(ctx, txErr)
-// 	}()
-
-// 	contentBlob, err := s.store.Blobs().CreateBlob(ctx, content)
-// 	if err != nil {
-// 		return page, err
-// 	}
-
-// 	site, txErr := s.GetSite(ctx)
-// 	if txErr != nil {
-// 		return page, txErr
-// 	}
-// 	page, txErr = s.store.Pages().PutPage(ctx, nil, title, path, contentBlob.UID, templateName, tags, excerpt)
-// 	if txErr != nil {
-// 		return page, txErr
-// 	}
-// 	if _, txErr = s.store.Versions().SetPage(ctx, site.NextVersion, "", page.Path, page.UID); txErr != nil {
-// 		return page, txErr
-// 	}
-// 	if txErr := s.VersionManager().SetPage("", path, page.UID); txErr != nil {
-// 		return page, txErr
-// 	}
-// 	return page, nil
-// }
-
-// func (s *Svc) UpdatePage(ctx context.Context, uid ulid.ULID, title string, path string, templateName string, tags []string, excerpt string, content []byte) (page core.Page, contentUpdated bool, txErr error) {
-// 	// TODO: verify template exists
-
-// 	ctx, err := s.store.StartTx(ctx, true)
-// 	if err != nil {
-// 		return page, false, err
-// 	}
-// 	defer func() {
-// 		txErr = s.store.EndTx(ctx, txErr)
-// 	}()
-
-// 	site, txErr := s.GetSite(ctx)
-// 	if txErr != nil {
-// 		return page, false, txErr
-// 	}
-
-// 	page, txErr = s.store.Pages().GetPage(ctx, uid)
-// 	if txErr != nil {
-// 		return page, false, txErr
-// 	}
-// 	previousPath := page.Path
-
-// 	if path != previousPath {
-// 		if _, txErr = s.store.Versions().SetPage(ctx, site.NextVersion, previousPath, path, page.UID); txErr != nil {
-// 			return page, false, txErr
-// 		}
-// 		if txErr := s.VersionManager().SetPage(previousPath, path, page.UID); txErr != nil {
-// 			return page, false, txErr
-// 		}
-// 	}
-
-// 	contentBlob, txErr := s.store.Blobs().GetBlob(ctx, page.Content)
-// 	if txErr != nil {
-// 		return page, false, txErr
-// 	}
-// 	contentBlobEq, txErr := contentBlob.Equal(content)
-// 	if txErr != nil {
-// 		return page, false, txErr
-// 	}
-// 	if !contentBlobEq {
-// 		if _, txErr := s.store.Blobs().UpdateBlob(ctx, page.Content, content); txErr != nil {
-// 			return page, false, txErr
-// 		}
-// 		contentUpdated = true
-// 	}
-
-// 	page, txErr = s.store.Pages().PutPage(ctx, &uid, title, path, page.Content, templateName, tags, excerpt)
-// 	if err != nil {
-// 		return page, false, txErr
-// 	}
-
-// 	return page, contentUpdated, nil
-// }
+func (s *Svc) DeletePage(ctx context.Context, uid ulid.ULID) (txErr error) {
+	ctx, err := s.store.StartTx(ctx, true)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		txErr = s.store.EndTx(ctx, txErr)
+	}()
+	site, err := s.GetSite(ctx)
+	if err != nil {
+		return err
+	}
+	page, err := s.GetPage(ctx, uid)
+	if err != nil {
+		return err
+	}
+	if _, err := s.store.Versions().UnsetPage(ctx, site.NextVersion, page.Path, page.UID); err != nil {
+		return err
+	}
+	if err := s.VersionManager().UnsetPage(page.Path); err != nil {
+		return err
+	}
+	return nil
+}
 
 func NewService(rc *config.RuntimeConfig, s store.Store) (Service, error) {
 	cm, err := NewCachedContentManager(rc, s.Blobs())

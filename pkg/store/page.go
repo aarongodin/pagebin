@@ -8,9 +8,12 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
+const pageStorePageSize = 50
+
 type PageStore interface {
 	PutPage(ctx context.Context, uid *ulid.ULID, write core.WritablePage, content ulid.ULID) (core.Page, error)
 	GetPage(ctx context.Context, uid ulid.ULID) (core.Page, error)
+	GetPages(ctx context.Context, start *ulid.ULID) ([]core.Page, *ulid.ULID, error)
 }
 
 type pageStore struct {
@@ -39,6 +42,18 @@ func (s pageStore) PutPage(ctx context.Context, uid *ulid.ULID, write core.Writa
 
 func (s pageStore) GetPage(ctx context.Context, uid ulid.ULID) (core.Page, error) {
 	return s.db.One(ctx, bucketPages, uid.String())
+}
+
+func (s pageStore) GetPages(ctx context.Context, start *ulid.ULID) ([]core.Page, *ulid.ULID, error) {
+	pages, cursor, err := s.db.Many(ctx, bucketPages, getStringKey(start), 5)
+	if err != nil {
+		return nil, nil, err
+	}
+	cursorULID, err := getULIDKey(cursor)
+	if err != nil {
+		return nil, nil, err
+	}
+	return pages, cursorULID, nil
 }
 
 func NewPageStore(db *bolt.DB) PageStore {
